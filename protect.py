@@ -59,7 +59,9 @@ l = 2
 
 # Apply l-diversity
 l_diverse_df = apply_l_diversity(k_anonymous_df, quasi_identifiers, sensitive_attr, l)
-print(l_diverse_df.head())def apply_t_closeness(df, quasi_identifiers, sensitive_attr, t):
+print(l_diverse_df.head())
+
+def apply_t_closeness(df, quasi_identifiers, sensitive_attr, t):
     # Calculate the overall distribution of the sensitive attribute
     overall_dist = df[sensitive_attr].value_counts(normalize=True)
     

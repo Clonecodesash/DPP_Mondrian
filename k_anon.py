@@ -23,7 +23,7 @@ def is_k_anonymous(file_path, quasi_identifiers, k):
 # else:
 #     print(f"The dataset is not {k}-anonymous.")
 
-is_k_anonymous('synthetic_data.csv', ["Education"], 3)
+is_k_anonymous('anonymized_data.csv', ['Age', 'ZipCode'] , 5)
 
 
 
@@ -94,7 +94,7 @@ def l_diversity(file_path, quasi_identifiers, sensitive_attr, l):
     return l_diverse
 
 # Example usage
-file_path = 'synthetic_data.csv'
+file_path = 'relaxed_anonymized_data.csv'
 quasi_identifiers = ['Age', 'Gender', 'ZipCode', 'Education', 'Nationality']
 sensitive_attr = 'Salary'
 l = 2

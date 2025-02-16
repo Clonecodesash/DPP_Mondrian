@@ -1,6 +1,7 @@
 import pandas as pd
 import hashlib
 import time
+import matplotlib.pyplot as plt
 
 class Mondrian:
     def __init__(self, k: int, df: pd.DataFrame, qi: list, decoding_dict=None):
@@ -175,12 +176,56 @@ def apply_mondrian(df, k, qi, columns_to_tokenize, decoding_dict=None, output_pa
     return pd.concat(mondrian.partitions), nac, info_loss, execution_time
 
 # Load dataset
-df = pd.read_csv('./data/synthetic_data_10.csv')  # Replace with actual dataset path
-qi_attributes = ['Age', 'ZipCode','Education']  # Replace with actual quasi-identifiers
-k_value = 4
+df = pd.read_csv('./data/synthetic_data_1000.csv')  # Replace with actual dataset path
+qi_attributes = ['Age', 'ZipCode']  # Replace with actual quasi-identifiers
+k_values = [3, 5, 10, 20, 50, 100]  # Specify the k-anonymity values to test
 columns_to_tokenize = ['Name']  # Specify the columns to tokenize
-anonymized_df, nac, info_loss, execution_time = apply_mondrian(df, k_value, qi_attributes, columns_to_tokenize)
-print(anonymized_df.head())
-print(f"Normalized Average Equivalence Class Size (NAC): {nac}")
-print(f"Information Loss (%): {info_loss}")
-print(f"Execution Time (seconds): {execution_time}")
+
+nac_values = []
+info_loss_values = []
+execution_time_values = []
+
+for k in k_values:
+    anonymized_df, nac, info_loss, execution_time = apply_mondrian(df, k, qi_attributes, columns_to_tokenize)
+    print(anonymized_df.head())
+    print(f'k-Anonymity: {k}')
+    print(f"Normalized Average Equivalence Class Size (NAC): {nac}")
+    print(f"Information Loss (%): {info_loss}")
+    print(f"Execution Time (seconds): {execution_time}")
+    
+    nac_values.append(nac)
+    info_loss_values.append(info_loss)
+    execution_time_values.append(execution_time)
+
+# Plotting NAC vs k
+plt.figure(figsize=(12, 8))
+plt.plot(k_values, nac_values, marker='o', color='tab:blue', label='NAC')
+plt.xlabel('k')
+plt.ylabel('NAC')
+plt.title('NAC vs k')
+plt.grid()
+plt.legend()
+plt.savefig('data/nac_plot.jpg')
+plt.show()
+
+# Plotting Information Loss vs k
+plt.figure(figsize=(12, 8))
+plt.plot(k_values, info_loss_values, marker='o', color='tab:red', label='Information Loss (%)')
+plt.xlabel('k')
+plt.ylabel('Information Loss (%)')
+plt.title('Information Loss vs k')
+plt.grid()
+plt.legend()
+plt.savefig('data/info_loss_plot.jpg')
+plt.show()
+
+# Plotting Execution Time vs k
+plt.figure(figsize=(12, 8))
+plt.plot(k_values, execution_time_values, marker='o', color='tab:green', label='Execution Time (seconds)')
+plt.xlabel('k')
+plt.ylabel('Execution Time (seconds)')
+plt.title('Execution Time vs k')
+plt.grid()
+plt.legend()
+plt.savefig('data/execution_time_plot.jpg')
+plt.show()

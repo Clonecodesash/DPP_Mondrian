@@ -1,91 +1,102 @@
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
 
-# Replace 'your_file.csv' with the path to your CSV file
-file_path = 'synthetic_data.csv'
+class Mondrian:
+    def __init__(self, k: int, df: pd.DataFrame, qi: list, decoding_dict=None):
+        self.k = k
+        self.df = df.copy()
+        self.qi = qi
+        self.partitions = []  # Stores anonymized partitions
+        self.decoding_dict = decoding_dict if decoding_dict else {}
 
-# Read the CSV file into a DataFrame
-df = pd.read_csv(file_path)
+    def choose_dimension(self, examined_qi):
+        """
+        Chooses the dimension with the widest range of values.
+        """
+        dim_ranges = {q: self.df[q].max() - self.df[q].min() for q in self.qi}
+        sorted_dims = sorted(dim_ranges.items(), key=lambda x: x[1], reverse=True)
+        return sorted_dims[examined_qi][0]
 
-# Display the first few rows of the DataFrame
-print(df.head())
+    def anonymize_aux(self):
+        self.anonymize(self.df)
+        self.generalize_region()
 
-# Initialize the LabelEncoder
-label_encoder = LabelEncoder()
+    def anonymize(self, partition, examined_qi=0):
+        """
+        Greedy partitioning algorithm
+        """
+        if len(partition) <= 2 * self.k or examined_qi >= len(self.qi):
+            self.partitions.append(partition)
+            return
 
-# Tokenize the 'id' and 'name' columns
-df['id'] = label_encoder.fit_transform(df['id'])
-df['name'] = label_encoder.fit_transform(df['name'])
+        dim = self.choose_dimension(examined_qi)
+        fs = partition[dim].values
+        split_val = self.find_median(fs)
+        lhs_rhs = self.create_partition(partition, dim, split_val)
 
-# Display the first few rows of the DataFrame after tokenization
-print(df.head())
+        if lhs_rhs:
+            self.anonymize(lhs_rhs[0])
+            self.anonymize(lhs_rhs[1])
+        else:
+            self.anonymize(partition, examined_qi + 1)
 
+    def create_partition(self, partition, dim, split_val):
+        """
+        Splits partition into two sub-partitions based on split_val.
+        """
+        left_partition = partition[partition[dim] <= split_val]
+        right_partition = partition[partition[dim] > split_val]
 
-def apply_k_anonymity(df, quasi_identifiers, k):
-    # Group by the quasi-identifiers and count the occurrences
-    grouped = df.groupby(quasi_identifiers).size().reset_index(name='counts')
-    
-    # Filter groups that have at least k occurrences
-    valid_groups = grouped[grouped['counts'] >= k]
-    
-    # Merge the valid groups back to the original DataFrame
-    k_anonymous_df = df.merge(valid_groups[quasi_identifiers], on=quasi_identifiers, how='inner')
-    
-    return k_anonymous_df
+        if len(left_partition) < self.k or len(right_partition) < self.k:
+            return None
 
-# Define quasi-identifiers and k value
-quasi_identifiers = ['Age', 'Gender', 'ZipCode', 'Education', 'Nationality']
-k = 3
+        return left_partition, right_partition
 
-# Apply k-anonymity
-k_anonymous_df = apply_k_anonymity(df, quasi_identifiers, k)
-print(k_anonymous_df.head())
+    def generalize_region(self):
+        """
+        Generalizes each partition by replacing values with ranges.
+        """
+        generalized_partitions = []
+        for partition in self.partitions:
+            for q in self.qi:
+                min_val, max_val = partition[q].min(), partition[q].max()
+                if q in self.decoding_dict:
+                    partition[q] = partition[q].astype(str).map(lambda x: self.decoding_dict[q].get(x, x))
+                else:
+                    partition[q] = partition[q].astype(str).apply(lambda x: f'{min_val}~{max_val}' if min_val != max_val else str(min_val))
+            generalized_partitions.append(partition)
+        self.partitions = generalized_partitions
 
-def apply_l_diversity(df, quasi_identifiers, sensitive_attr, l):
-    # Group by the quasi-identifiers and aggregate the sensitive attribute
-    grouped = df.groupby(quasi_identifiers)[sensitive_attr].nunique().reset_index(name='unique_sensitive_values')
-    
-    # Filter groups that have at least l different sensitive values
-    valid_groups = grouped[grouped['unique_sensitive_values'] >= l]
-    
-    # Merge the valid groups back to the original DataFrame
-    l_diverse_df = df.merge(valid_groups[quasi_identifiers], on=quasi_identifiers, how='inner')
-    
-    return l_diverse_df
+    @staticmethod
+    def find_median(values):
+        """
+        Finds the median of a given list of values.
+        """
+        sorted_vals = sorted(values)
+        mid = len(sorted_vals) // 2
+        return (sorted_vals[mid] + sorted_vals[mid - 1]) / 2 if len(sorted_vals) % 2 == 0 else sorted_vals[mid]
 
-# Define sensitive attribute and l value
-sensitive_attr = 'Salary'
-l = 2
+    def write_on_file(self, path):
+        """
+        Writes the anonymized dataset to a CSV file.
+        """
+        pd.concat(self.partitions).to_csv(path, index=False)
 
-# Apply l-diversity
-l_diverse_df = apply_l_diversity(k_anonymous_df, quasi_identifiers, sensitive_attr, l)
-print(l_diverse_df.head())
+    def get_normalized_avg_equivalence_class_size(self):
+        """
+        Measures how well partitioning approaches the best case.
+        """
+        return (len(self.df) / len(self.partitions)) / self.k
 
-def apply_t_closeness(df, quasi_identifiers, sensitive_attr, t):
-    # Calculate the overall distribution of the sensitive attribute
-    overall_dist = df[sensitive_attr].value_counts(normalize=True)
-    
-    # Group by the quasi-identifiers and calculate the distribution of the sensitive attribute within each group
-    grouped = df.groupby(quasi_identifiers)[sensitive_attr].value_counts(normalize=True).reset_index(name='proportion')
-    
-    # Calculate the t-closeness for each group
-    def calculate_t_closeness(group):
-        group_dist = group.set_index(sensitive_attr)['proportion']
-        return (group_dist - overall_dist).abs().max()
-    
-    t_closeness = grouped.groupby(quasi_identifiers).apply(calculate_t_closeness).reset_index(name='t_closeness')
-    
-    # Filter groups that satisfy the t-closeness condition
-    valid_groups = t_closeness[t_closeness['t_closeness'] <= t]
-    
-    # Merge the valid groups back to the original DataFrame
-    t_close_df = df.merge(valid_groups[quasi_identifiers], on=quasi_identifiers, how='inner')
-    
-    return t_close_df
+# Example Usage
+def apply_mondrian(df, k, qi, decoding_dict=None, output_path='anonymized_data.csv'):
+    mondrian = Mondrian(k, df, qi, decoding_dict)
+    mondrian.anonymize_aux()
+    mondrian.write_on_file(output_path)
+    return pd.concat(mondrian.partitions)
 
-# Define t value
-t = 0.2
-
-# Apply t-closeness
-t_close_df = apply_t_closeness(k_anonymous_df, quasi_identifiers, sensitive_attr, t)
-print(t_close_df.head())
+# Load dataset
+df = pd.read_csv('synthetic_data.csv')  # Replace with actual dataset path
+qi_attributes = ['Age', 'ZipCode']  # Replace with actual quasi-identifiers
+k_value = 3
+anonymized_df = apply_mondrian(df, k_value, qi_attributes)
+print(anonymized_df.head())
